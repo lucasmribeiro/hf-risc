@@ -233,6 +233,10 @@ mem_test: crt
 	$(GCC_$(ARCH)) -o mem_test.o app/mem_test.c
 	@$(MAKE) --no-print-directory link
 
+mini_aes: crt
+	$(GCC_$(ARCH)) -o mini_aes.o app/mini_aes.c
+	@$(MAKE) --no-print-directory link
+
 newton: crt
 	$(GCC_$(ARCH)) -o newton.o app/newton.c
 	@$(MAKE) --no-print-directory link
