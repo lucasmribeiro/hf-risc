@@ -144,6 +144,7 @@ begin
 										data_read_aes_s(23 downto 16) &
 										data_read_aes_s(31 downto 24);
 	ext_periph <= '1' when address(31 downto 24) = x"e7" else '0';
+	clear <= '0' when current_state /= s_idle else '1';
 
 	-- read data from register mapped in memory 
 	read_data: process (clock_in, reset, address, key_in, data_in, data_out)
@@ -223,8 +224,6 @@ begin
 	fsm_aes: process (clock_in, reset)
 	begin
 		if reset = '1' then
-			enc <= '0';
-			clear <= '1';
 			load_i <= '0';
 			counter <= 0;
 			current_state <= s_idle;
@@ -234,7 +233,6 @@ begin
 					if start = '1' then 		-- start = '1'
 						current_state <= s_load;
 						counter <= 0;
-						clear <= '0';
 					end if;
 				when s_load =>
 						if counter < 16 then
@@ -254,15 +252,16 @@ begin
 					if done_o = '1' then
 						counter <= counter + 1;
 					else 										-- done_o = '0'
-						current_state <= s_idle;
-						counter <= 0;
-						clear <= '1';
+						if start = '0' then
+							current_state <= s_idle;
+							counter <= 0;
+						end if;
 					end if;
 			end case;
 		end if;
 	end process;
 
-	process (clock_in, reset)
+	set_key_data: process (clock_in, reset)
 	begin
 		if reset = '1' then
 			key_i <= x"00";
@@ -320,11 +319,14 @@ begin
 						data_i <= data_in (7 downto 0);
 					when others =>
 				end case;
+			else
+				key_i <= x"00";
+				data_i <= x"00";
 			end if;
 		end if;
 	end process;
 
-	process (clock_in, reset)
+	get_data: process (clock_in, reset)
 	begin
 		if reset = '1' then
 			data_out <= (others => '0');
