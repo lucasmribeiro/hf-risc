@@ -14,10 +14,11 @@
 #define AES_OUT1			(*(volatile uint32_t *)(AES_BASE + 0x0A0))
 #define AES_OUT2			(*(volatile uint32_t *)(AES_BASE + 0x0B0))
 #define AES_OUT3			(*(volatile uint32_t *)(AES_BASE + 0x0C0))
-#define AES_LOAD			(1 << 0)
+#define AES_LOAD			(1 << 3)
 #define AES_ENCRYPT			(0 << 1)
 #define AES_DECRYPT			(1 << 1)
 #define AES_DONE			(1 << 2)
+#define AES_START			(1 << 3)
 #define AES_SIZE			4
 
 /* constantes */
@@ -36,6 +37,35 @@ void aes_ctr_crypt(uint8_t *out, uint8_t *in, uint32_t len, const uint32_t key[A
 
 int main(void) 
 {	
+	uint32_t cycles;
+	uint32_t data_out[AES_SIZE];
+	
+	AES_CONTROL = AES_ENCRYPT;
+	AES_KEY0 = key_in[0];
+	AES_KEY1 = key_in[1];
+	AES_KEY2 = key_in[2];
+	AES_KEY3 = key_in[3];
+
+	AES_IN0 = data_in[0];
+	AES_IN1 = data_in[1];
+	AES_IN2 = data_in[2];
+	AES_IN3 = data_in[3];
+
+	printf("message: %8x%8x%8x%8x\n", data_in[0], data_in[1], data_in[2], data_in[3]);
+
+	cycles = TIMER0;
+	AES_CONTROL |= AES_START;
+	while (!(AES_CONTROL & AES_DONE));
+	AES_CONTROL &= ~AES_START;
+	cycles = TIMER0 - cycles;
+
+	data_out[0] = AES_OUT0;
+	data_out[1] = AES_OUT1;
+	data_out[2] = AES_OUT2;
+	data_out[3] = AES_OUT3;
+	
+	printf("encipher: %8x%8x%8x%8x, %d cycles\n", data_out[0], data_out[1], data_out[2], data_out[3], cycles);
+
 	return 0;
 }
 
@@ -47,24 +77,6 @@ void aes_hw_setkey(uint32_t key_i[AES_SIZE])
 	AES_KEY3 = key_i[3];
 }
 
-void aes_hw_cipher(uint32_t data_i[AES_SIZE], uint8_t oper)
-{
-	AES_CONTROL = oper;
-	AES_IN0 = data_i[0];
-	AES_IN1 = data_i[1];
-	AES_IN2 = data_i[2];
-	AES_IN3 = data_i[3];
-	
-	AES_CONTROL |= AES_LOAD;
-	while (!(AES_CONTROL & ~AES_LOAD));
-	
-	while (!(AES_CONTROL & AES_DONE));
-	data_i[0] = AES_OUT0;
-	data_i[1] = AES_OUT1;
-	data_i[2] = AES_OUT2;
-	data_i[3] = AES_OUT3;
-}
-
 void aes_hw_encipher(uint32_t data_i[AES_SIZE])
 {
 	AES_CONTROL = AES_ENCRYPT;
@@ -73,8 +85,8 @@ void aes_hw_encipher(uint32_t data_i[AES_SIZE])
 	AES_IN2 = data_i[2];
 	AES_IN3 = data_i[3];
 	
-	AES_CONTROL |= AES_LOAD;
-	while (!(AES_CONTROL & ~AES_LOAD));
+	AES_CONTROL |= AES_START;
+	while (!(AES_CONTROL & ~AES_START));
 	
 	while (!(AES_CONTROL & AES_DONE));
 	data_i[0] = AES_OUT0;
@@ -91,8 +103,8 @@ void aes_hw_decipher(uint32_t data_i[AES_SIZE])
 	AES_IN2 = data_i[2];
 	AES_IN3 = data_i[3];
 	
-	AES_CONTROL |= AES_LOAD;
-	while (!(AES_CONTROL & ~AES_LOAD));
+	AES_CONTROL |= AES_START;
+	while (!(AES_CONTROL & ~AES_START));
 	
 	while (!(AES_CONTROL & AES_DONE));
 	data_i[0] = AES_OUT0;
