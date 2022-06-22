@@ -27,6 +27,8 @@
 const uint32_t 	     iv[AES_SIZE] = { 0x14151617, 0x191A1B1C, 0x1E1F2021, 0x23242526 };
 const uint32_t   key_in[AES_SIZE] = { 0x00010203, 0x05060708, 0x0A0B0C0D, 0x0F101112 };
 #if TEST
+// #define TEST_SIZE 		4
+// const uint32_t data_in[TEST_SIZE] = { 0x506812A4, 0x5F08C889, 0xB97F5980, 0x038B8359 };
 #define TEST_SIZE			16
 const uint32_t  data_in[TEST_SIZE] = { 
 	0x506812A4, 0x5F08C889, 0xB97F5980, 0x038B8359,
@@ -68,23 +70,20 @@ const uint32_t  data_in[TEST_SIZE] = {
 void aes_hw_setkey(const uint32_t key[AES_SIZE]);
 void aes_hw_encipher(uint32_t data[AES_SIZE]);
 void aes_hw_decipher(uint32_t data[AES_SIZE]);
+void aes_ecb_encipher(uint32_t *out, uint32_t *in, uint32_t len);
+void aes_ecb_decipher(uint32_t *out, uint32_t *in, uint32_t len);
 void aes_cbc_encipher(uint32_t *out, uint32_t *in, uint32_t len);
 void aes_cbc_decipher(uint32_t *out, uint32_t *in, uint32_t len);
 
 int main(void) 
 {
-	uint32_t message[TEST_SIZE], len;
+	uint32_t message[TEST_SIZE];
 	aes_hw_setkey(key_in);
 
 	memcpy(message, data_in, (TEST_SIZE * sizeof(uint32_t)));
-	len = TEST_SIZE * sizeof(uint32_t);
-	printf("encipher cbc iniciado\n");
-	aes_cbc_encipher(message, message, len);
-	printf("encipher cbc finalizado\n");
-
-	printf("decipher cbc iniciado\n");
-	aes_cbc_decipher(message, message, len);
-	printf("decipher cbc finalizado\n");
+	aes_ecb_encipher(message, message, TEST_SIZE);
+	// printf("\n-------------------------------------\n");
+	aes_ecb_decipher(message, message, TEST_SIZE);
 	
 	return 0;
 }
@@ -116,7 +115,6 @@ void aes_hw_encipher(uint32_t data[AES_SIZE])
 }
 void aes_hw_decipher(uint32_t data[AES_SIZE])
 {
-	printf("aes hw decipher\n");
 	AES_CONTROL = AES_DECRYPT;
 	AES_IN0 = data[0];
 	AES_IN1 = data[1];
@@ -132,6 +130,42 @@ void aes_hw_decipher(uint32_t data[AES_SIZE])
 	data[2] = AES_OUT2;
 	data[3] = AES_OUT3;
 }
+void aes_ecb_encipher(uint32_t *out, uint32_t *in, uint32_t len)
+{
+	uint32_t i, rem, block[AES_SIZE];
+	
+	rem = len % AES_SIZE;
+	for (i = 0; i < len; i += AES_SIZE) {
+		aes_hw_encipher(in);
+		in += AES_SIZE;
+		out += AES_SIZE;
+	}
+	if (rem) {
+		memcpy(block, in, AES_SIZE);
+		memcpy(block, in, AES_SIZE - rem);
+		memset(block + rem, 0, AES_SIZE - rem);
+		aes_hw_encipher(in);
+		memcpy(out, block, AES_SIZE - rem);
+	}
+}
+void aes_ecb_decipher(uint32_t *out, uint32_t *in, uint32_t len)
+{
+	uint32_t i, rem, block[AES_SIZE];
+	
+	rem = len % AES_SIZE;
+	for (i = 0; i < len; i += AES_SIZE) {
+		aes_hw_decipher(in);
+		in += AES_SIZE;
+		out += AES_SIZE;
+	}
+	if (rem) {
+		memcpy(block, in, AES_SIZE);
+		memcpy(block, in, AES_SIZE - rem);
+		memset(block + rem, 0, AES_SIZE - rem);
+		aes_hw_decipher(block);
+		memcpy(out, block, AES_SIZE - rem);
+	}
+}
 void aes_cbc_encipher(uint32_t *out, uint32_t *in, uint32_t len)
 {
 	uint32_t i, rem, block[AES_SIZE], tiv[AES_SIZE];
@@ -142,30 +176,28 @@ void aes_cbc_encipher(uint32_t *out, uint32_t *in, uint32_t len)
 	tiv[2] = iv[2];
 	tiv[3] = iv[3];
 	for (i = 0; i < len; i += AES_SIZE) {
-		memcpy((uint32_t *)block, in, AES_SIZE);
-		block[0] ^= tiv[0];
-		block[1] ^= tiv[1];
-		block[2] ^= tiv[2];
-		block[3] ^= tiv[3];
-		aes_hw_encipher(block);
-		tiv[0] = block[0];
-		tiv[1] = block[1];
-		tiv[2] = block[2];
-		tiv[3] = block[3];
-		memcpy(out, (uint32_t *)block, AES_SIZE);
+		in[0] ^= tiv[0];
+		in[1] ^= tiv[1];
+		in[2] ^= tiv[2];
+		in[3] ^= tiv[3];
+		aes_hw_encipher(in);
+		tiv[0] = out[0];
+		tiv[1] = out[1];
+		tiv[2] = out[2];
+		tiv[3] = out[3];
 		in += AES_SIZE;
 		out += AES_SIZE;
 	}
 	if (rem) {
-		memcpy((uint32_t *)block, in, AES_SIZE);
-		memcpy((uint32_t *)block, in, AES_SIZE - rem);
-		memset((uint32_t *)block + rem, 0, AES_SIZE - rem);
+		memcpy(block, in, AES_SIZE);
+		memcpy(block, in, AES_SIZE - rem);
+		memset(block + rem, 0, AES_SIZE - rem);
 		block[0] ^= tiv[0];
 		block[1] ^= tiv[1];
 		block[2] ^= tiv[2];
 		block[3] ^= tiv[3];
 		aes_hw_encipher(block);
-		memcpy(out, (uint32_t *)block, AES_SIZE - rem);
+		memcpy(out, block, AES_SIZE - rem);
 	}
 }
 void aes_cbc_decipher(uint32_t *out, uint32_t *in, uint32_t len)
@@ -178,29 +210,28 @@ void aes_cbc_decipher(uint32_t *out, uint32_t *in, uint32_t len)
 	tiv[2] = iv[2];
 	tiv[3] = iv[3];
 	for (i = 0; i < len; i += AES_SIZE) {
-		memcpy((uint32_t *)block, in, AES_SIZE);
-		block[0] ^= tiv[0];
-		block[1] ^= tiv[1];
-		block[2] ^= tiv[2];
-		block[3] ^= tiv[3];
-		aes_hw_decipher(block);
-		tiv[0] = block[0];
-		tiv[1] = block[1];
-		tiv[2] = block[2];
-		tiv[3] = block[3];
-		memcpy(out, (uint32_t *)block, AES_SIZE);
+
+		in[0] ^= tiv[0];
+		in[1] ^= tiv[1];
+		in[2] ^= tiv[2];
+		in[3] ^= tiv[3];
+		aes_hw_decipher(in);
+		out[0] = block[0];
+		out[1] = block[1];
+		out[2] = block[2];
+		out[3] = block[3];
 		in += AES_SIZE;
 		out += AES_SIZE;
 	}
 	if (rem) {
-		memcpy((uint32_t *)block, in, AES_SIZE);
-		memcpy((uint32_t *)block, in, AES_SIZE - rem);
-		memset((uint32_t *)block + rem, 0, AES_SIZE - rem);
+		memcpy(block, in, AES_SIZE);
+		memcpy(block, in, AES_SIZE - rem);
+		memset(block + rem, 0, AES_SIZE - rem);
 		block[0] ^= tiv[0];
 		block[1] ^= tiv[1];
 		block[2] ^= tiv[2];
 		block[3] ^= tiv[3];
 		aes_hw_decipher(block);
-		memcpy(out, (uint32_t *)block, AES_SIZE - rem);
+		memcpy(out, block, AES_SIZE - rem);
 	}
 }
